@@ -1,0 +1,16 @@
+{
+  "name": "350-event-service",
+  "version": "1.0.0",
+  "description": "Event service for 350 DataHive lakehouse logging system",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5"
+  }
+}

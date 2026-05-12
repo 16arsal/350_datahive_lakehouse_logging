@@ -1,0 +1,13 @@
+{
+  "name": "350-notification-service",
+  "version": "1.0.0",
+  "description": "Notification worker for 350 DataHive lakehouse logging system",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "dotenv": "^16.4.5"
+  }
+}

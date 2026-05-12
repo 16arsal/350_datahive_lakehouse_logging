@@ -1,0 +1,128 @@
+services:
+  # 350 PostgreSQL database for users and events.
+  350_postgres:
+    image: postgres:16-alpine
+    container_name: 350_postgres
+    environment:
+      POSTGRES_USER: 350_admin
+      POSTGRES_PASSWORD: 350_password
+      POSTGRES_DB: 350_datahive_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - 350_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U 350_admin -d 350_datahive_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - 350_datahive_network
+
+  # 350 RabbitMQ broker with management dashboard for async event notifications.
+  350_rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: 350_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: 350_rabbit
+      RABBITMQ_DEFAULT_PASS: 350_rabbit_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    networks:
+      - 350_datahive_network
+
+  # 350 Auth API: registers users, hashes passwords, and issues JWT tokens.
+  350_auth_service:
+    build:
+      context: ./auth-service
+    container_name: 350_auth_service
+    environment:
+      PORT: 5001
+      DB_HOST: 350_postgres
+      DB_PORT: 5432
+      DB_USER: 350_admin
+      DB_PASSWORD: 350_password
+      DB_NAME: 350_datahive_db
+      JWT_SECRET: 350_super_secret_exam_key
+    ports:
+      - "5001:5001"
+    depends_on:
+      350_postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - 350_datahive_network
+
+  # 350 Event API: stores events, publishes RabbitMQ messages, and writes JSON lakehouse logs.
+  350_event_service:
+    build:
+      context: ./event-service
+    container_name: 350_event_service
+    environment:
+      PORT: 5002
+      DB_HOST: 350_postgres
+      DB_PORT: 5432
+      DB_USER: 350_admin
+      DB_PASSWORD: 350_password
+      DB_NAME: 350_datahive_db
+      JWT_SECRET: 350_super_secret_exam_key
+      RABBITMQ_URL: amqp://350_rabbit:350_rabbit_password@350_rabbitmq:5672
+      RABBITMQ_QUEUE: 350_event_notifications
+      LOGS_DIR: /app/logs
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      350_postgres:
+        condition: service_healthy
+      350_rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - 350_datahive_network
+
+  # 350 Notification worker: consumes RabbitMQ event messages and writes notification JSON logs.
+  350_notification_service:
+    build:
+      context: ./notification-service
+    container_name: 350_notification_service
+    environment:
+      RABBITMQ_URL: amqp://350_rabbit:350_rabbit_password@350_rabbitmq:5672
+      RABBITMQ_QUEUE: 350_event_notifications
+      NOTIFICATION_LOGS_DIR: /app/notification_logs
+    volumes:
+      - ./notification_logs:/app/notification_logs
+    depends_on:
+      350_rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - 350_datahive_network
+
+volumes:
+  350_postgres_data:
+
+networks:
+  350_datahive_network:
+    name: 350_datahive_network

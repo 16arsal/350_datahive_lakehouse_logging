@@ -1,0 +1,10 @@
+node_modules/
+npm-debug.log*
+Dockerfile.*
+.env
+.env.local
+.DS_Store
+Thumbs.db
+logs/*.json
+notification_logs/*.json
+coverage/
