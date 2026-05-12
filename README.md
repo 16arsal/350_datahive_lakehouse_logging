@@ -46,26 +46,28 @@ Infrastructure services:
 
 ```text
 350_datahive_lakehouse_logging/
-├── docker-compose.yml
-├── README.md
-├── .gitignore
-├── .env.example
-├── logs/
-│   └── .gitkeep
-├── notification_logs/
-│   └── .gitkeep
-├── auth-service/
-│   ├── Dockerfile
-│   ├── package.json
-│   └── server.js
-├── event-service/
-│   ├── Dockerfile
-│   ├── package.json
-│   └── server.js
-└── notification-service/
-    ├── Dockerfile
-    ├── package.json
-    └── worker.js
++-- docker-compose.yml
++-- README.md
++-- API_TESTING.md
++-- screenshots_checklist.md
++-- .gitignore
++-- .env.example
++-- logs/
+|   +-- .gitkeep
++-- notification_logs/
+|   +-- .gitkeep
++-- auth-service/
+|   +-- Dockerfile
+|   +-- package.json
+|   +-- server.js
++-- event-service/
+|   +-- Dockerfile
+|   +-- package.json
+|   +-- server.js
++-- notification-service/
+    +-- Dockerfile
+    +-- package.json
+    +-- worker.js
 ```
 
 ## Services and Ports
@@ -157,7 +159,7 @@ notification_350_<event_id>_<timestamp>.json
 
 From inside the project directory:
 
-```bash
+```powershell
 docker compose up --build
 ```
 
@@ -199,43 +201,47 @@ Password: 350_rabbit_password
 
 ### 1. Register
 
-```bash
-curl -X POST http://localhost:5001/register \
-  -H "Content-Type: application/json" \
+```powershell
+curl.exe -X POST "http://localhost:5001/register" `
+  -H "Content-Type: application/json" `
   -d '{"name":"Muhammad Arsal","email":"arsal@example.com","password":"123456"}'
 ```
 
 ### 2. Login
 
-```bash
-curl -X POST http://localhost:5001/login \
-  -H "Content-Type: application/json" \
+```powershell
+$login = curl.exe -X POST "http://localhost:5001/login" `
+  -H "Content-Type: application/json" `
   -d '{"email":"arsal@example.com","password":"123456"}'
+
+$login = $login | ConvertFrom-Json
+$token = $login.token
+$token
 ```
 
-Copy the `token` value from the login response.
+The `$token` variable is used by the protected Event Service commands below.
 
 ### 3. Create Event
 
-```bash
-curl -X POST http://localhost:5002/events \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer PASTE_TOKEN_HERE" \
+```powershell
+curl.exe -X POST "http://localhost:5002/events" `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $token" `
   -d '{"title":"Cloud Computing Final Lab","description":"Lakehouse logging prototype event","location":"GIKI Lab","event_date":"2026-05-12"}'
 ```
 
 ### 4. View Events
 
-```bash
-curl -X GET http://localhost:5002/events \
-  -H "Authorization: Bearer PASTE_TOKEN_HERE"
+```powershell
+curl.exe -X GET "http://localhost:5002/events" `
+  -H "Authorization: Bearer $token"
 ```
 
 ### 5. View Single Event
 
-```bash
-curl -X GET http://localhost:5002/events/1 \
-  -H "Authorization: Bearer PASTE_TOKEN_HERE"
+```powershell
+curl.exe -X GET "http://localhost:5002/events/1" `
+  -H "Authorization: Bearer $token"
 ```
 
 ## Expected Evidence for Exam Submission
@@ -257,27 +263,27 @@ Capture screenshots showing:
 
 ## Useful Docker Commands
 
-```bash
+```powershell
 docker compose ps
 ```
 
-```bash
+```powershell
 docker compose logs 350_auth_service
 ```
 
-```bash
+```powershell
 docker compose logs 350_event_service
 ```
 
-```bash
+```powershell
 docker compose logs 350_notification_service
 ```
 
-```bash
+```powershell
 docker compose down
 ```
 
-```bash
+```powershell
 docker compose down -v
 ```
 
@@ -285,7 +291,7 @@ Use `docker compose down -v` after the exam if you want to remove the PostgreSQL
 
 ## GitHub Submission Instructions
 
-```bash
+```powershell
 git init
 git add .
 git commit -m "Add 350 DataHive lakehouse logging system"
