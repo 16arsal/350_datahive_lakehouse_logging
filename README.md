@@ -1,88 +1,98 @@
-# 350 DataHive Lakehouse Logging System
+# DataHive Lakehouse Logging System
 
-## Student
+A Dockerized microservices prototype for user authentication, event creation, asynchronous notifications, PostgreSQL storage, and JSON log files that simulate a simple lakehouse ingestion workflow.
 
-**Name:** Muhammad Arsal  
-**Roll No:** 2022350
+This project was built for the CE408L Cloud Computing Lab final exam. It is intentionally small, but it demonstrates how multiple backend services can coordinate through a database, message queue, and structured file logs.
 
-## Problem Statement Summary
+## What the System Does
 
-DataHive needs a lightweight private cloud backend where users can register and log in, create events, notify another service asynchronously, and store event logs for lakehouse-style ingestion. This project is a Dockerized microservices prototype built for the CE408L Cloud Computing Lab Final Term Exam.
+The system lets a user register, log in, create events, and retrieve their own events. When an event is created, the event service performs three actions:
+
+1. Stores the event in PostgreSQL.
+2. Publishes an `EVENT_CREATED` message to RabbitMQ.
+3. Writes a structured JSON event log to `logs/`.
+
+A separate notification worker consumes the RabbitMQ message and writes a second structured JSON log to `notification_logs/`.
 
 ## Architecture
 
 ```text
-Client -> Auth Service -> PostgreSQL
-Client -> Event Service -> PostgreSQL
-Event Service -> RabbitMQ -> Notification Service
-Event Service -> JSON Logs
-Notification Service -> Notification JSON Logs
+Client
+  |
+  | register/login
+  v
+Auth Service --------------> PostgreSQL
+
+Client
+  |
+  | Bearer JWT + event request
+  v
+Event Service -------------> PostgreSQL
+  |                              
+  | publish EVENT_CREATED
+  v
+RabbitMQ Queue ------------> Notification Worker
+  |
+  +--> logs/event_350_<event_id>_<timestamp>.json
+
+Notification Worker -------> notification_logs/notification_350_<event_id>_<timestamp>.json
 ```
 
-The system has three Node.js services:
+## Services
 
-- **350_auth_service** handles user registration, login, password hashing, JWT creation, and user table setup.
-- **350_event_service** protects event APIs with JWT, stores events in PostgreSQL, publishes event-created messages to RabbitMQ, and writes JSON event logs for lakehouse-style ingestion.
-- **350_notification_service** is a worker that consumes RabbitMQ messages asynchronously, prints notification output, and saves consumed messages as JSON files.
+| Service | Source | Responsibility | Port |
+| --- | --- | --- | --- |
+| `350_auth_service` | `auth-service/server.js` | Registers users, hashes passwords with bcrypt, validates login, and issues JWTs. | `5001` |
+| `350_event_service` | `event-service/server.js` | Verifies JWTs, stores events, publishes RabbitMQ messages, and writes event ingestion logs. | `5002` |
+| `350_notification_service` | `notification-service/worker.js` | Consumes RabbitMQ messages and writes notification logs. | Internal worker |
+| `350_postgres` | `docker-compose.yml` | Stores `users` and `events` tables. | `5432` |
+| `350_rabbitmq` | `docker-compose.yml` | Provides AMQP messaging and the RabbitMQ management dashboard. | `5672`, `15672` |
 
-Infrastructure services:
+## Verified Tech Stack
 
-- **350_postgres** stores users and events in one PostgreSQL database.
-- **350_rabbitmq** provides asynchronous messaging and a browser management dashboard.
+- Node.js and Express
+- PostgreSQL 16 Alpine
+- RabbitMQ 3.13 Management Alpine
+- Docker and Docker Compose
+- `pg` for PostgreSQL access
+- `jsonwebtoken` for JWT authentication
+- `bcryptjs` for password hashing
+- `amqplib` for RabbitMQ publish/consume flow
+- JSON file logging through Node's filesystem APIs
 
-## Tech Stack
-
-- Node.js
-- Express.js
-- PostgreSQL
-- RabbitMQ
-- Docker
-- Docker Compose
-- JWT authentication
-- bcrypt password hashing
-- JSON file logging
-
-## Project Structure
+## Repository Structure
 
 ```text
-350_datahive_lakehouse_logging/
-+-- docker-compose.yml
-+-- README.md
-+-- API_TESTING.md
-+-- screenshots_checklist.md
-+-- .gitignore
-+-- .env.example
-+-- logs/
-|   +-- .gitkeep
-+-- notification_logs/
-|   +-- .gitkeep
-+-- auth-service/
-|   +-- Dockerfile
-|   +-- package.json
-|   +-- server.js
-+-- event-service/
-|   +-- Dockerfile
-|   +-- package.json
-|   +-- server.js
-+-- notification-service/
-    +-- Dockerfile
-    +-- package.json
-    +-- worker.js
+.
+|-- API_TESTING.md
+|-- CE-408-LAB-FINAL-SCREENSHOTS.pdf
+|-- docker-compose.yml
+|-- auth-service/
+|   |-- Dockerfile
+|   |-- package.json
+|   `-- server.js
+|-- event-service/
+|   |-- Dockerfile
+|   |-- package.json
+|   `-- server.js
+`-- notification-service/
+    |-- Dockerfile
+    |-- package.json
+    `-- worker.js
 ```
 
-## Services and Ports
+The generated runtime JSON logs are ignored by Git through `.gitignore`:
 
-| Service | Container Name | Port |
-| --- | --- | --- |
-| Auth Service | `350_auth_service` | `5001:5001` |
-| Event Service | `350_event_service` | `5002:5002` |
-| PostgreSQL | `350_postgres` | `5432:5432` |
-| RabbitMQ AMQP | `350_rabbitmq` | `5672:5672` |
-| RabbitMQ Dashboard | `350_rabbitmq` | `15672:15672` |
+```text
+logs/*.json
+notification_logs/*.json
+```
 
-## Database Design
+## Database Tables
 
-### users
+The services create their own tables on startup if they do not already exist.
+
+### `users`
 
 ```sql
 id SERIAL PRIMARY KEY
@@ -92,7 +102,7 @@ password_hash TEXT NOT NULL
 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ```
 
-### events
+### `events`
 
 ```sql
 id SERIAL PRIMARY KEY
@@ -104,15 +114,26 @@ event_date VARCHAR(100)
 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ```
 
-## RabbitMQ Queue
+## Authentication Flow
 
-Queue name:
+1. `POST /register` receives `name`, `email`, and `password`.
+2. The auth service normalizes the email, checks for duplicates, hashes the password with bcrypt, and inserts a user record.
+3. `POST /login` checks the password and returns a JWT that expires in 2 hours.
+4. Event routes require this header:
+
+```text
+Authorization: Bearer TOKEN_HERE
+```
+
+## RabbitMQ Flow
+
+The queue name is defined in `docker-compose.yml` and used by both the event service and notification worker:
 
 ```text
 350_event_notifications
 ```
 
-Message format:
+When an event is created, the event service publishes a persistent JSON message with this structure:
 
 ```json
 {
@@ -128,78 +149,93 @@ Message format:
 }
 ```
 
-## JSON Lakehouse Logging
+The notification worker calls `channel.prefetch(1)`, processes one message at a time, writes a notification log, and acknowledges the message. If message processing fails, it negatively acknowledges the message with requeue enabled.
 
-When an event is created, the Event Service writes a file in `logs/` using this filename pattern:
+## Structured JSON Logging
+
+### Event ingestion log
+
+Created by `event-service/server.js` in `logs/`:
 
 ```text
 event_350_<event_id>_<timestamp>.json
 ```
 
-The file contains:
+The log includes the inserted event, ingestion timestamp, storage format, resource prefix, and ingestion purpose.
 
-```json
-{
-  "lakehouse_log_type": "event_ingestion",
-  "resource_prefix": "350",
-  "event": {},
-  "ingested_at": "2026-05-12T00:00:00.000Z",
-  "storage_format": "json",
-  "purpose": "basic analytical data ingestion workflow"
-}
-```
+### Notification log
 
-The Notification Service writes consumed RabbitMQ messages in `notification_logs/` using this filename pattern:
+Created by `notification-service/worker.js` in `notification_logs/`:
 
 ```text
 notification_350_<event_id>_<timestamp>.json
 ```
 
-## How to Run
+The log includes the consumed RabbitMQ message, queue name, resource prefix, and consumption timestamp.
 
-From inside the project directory:
+## Run Locally
+
+Prerequisite: Docker Desktop or Docker Compose support.
+
+From the repository root:
 
 ```powershell
 docker compose up --build
 ```
 
-Open the RabbitMQ dashboard:
+Useful service URLs:
 
 ```text
-http://localhost:15672
+Auth health:        http://localhost:5001/health
+Event health:       http://localhost:5002/health
+RabbitMQ dashboard: http://localhost:15672
 ```
 
-RabbitMQ credentials:
+RabbitMQ dashboard credentials from `docker-compose.yml`:
 
 ```text
 Username: 350_rabbit
 Password: 350_rabbit_password
 ```
 
+Stop the system:
+
+```powershell
+docker compose down
+```
+
+Stop the system and remove the PostgreSQL volume:
+
+```powershell
+docker compose down -v
+```
+
 ## API Endpoints
 
-### Auth Service
+### Auth service
 
-| Method | Endpoint | Description |
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `http://localhost:5001/` | Auth service info |
-| `GET` | `http://localhost:5001/health` | Auth service health |
-| `POST` | `http://localhost:5001/register` | Register a new user |
-| `POST` | `http://localhost:5001/login` | Login and receive JWT |
+| `GET` | `http://localhost:5001/` | Service info |
+| `GET` | `http://localhost:5001/health` | Health check with database connectivity |
+| `POST` | `http://localhost:5001/register` | Create a user |
+| `POST` | `http://localhost:5001/login` | Return a JWT for a valid user |
 
-### Event Service
+### Event service
 
-| Method | Endpoint | Description |
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `http://localhost:5002/` | Event service info |
-| `GET` | `http://localhost:5002/health` | Event service health |
-| `POST` | `http://localhost:5002/events` | Create event, requires JWT |
-| `GET` | `http://localhost:5002/events` | View logged-in user's events, requires JWT |
-| `GET` | `http://localhost:5002/events/:id` | View one logged-in user's event, requires JWT |
+| `GET` | `http://localhost:5002/` | Service info |
+| `GET` | `http://localhost:5002/health` | Health check with PostgreSQL and RabbitMQ status |
+| `POST` | `http://localhost:5002/events` | Create an event for the authenticated user |
+| `GET` | `http://localhost:5002/events` | List events for the authenticated user |
+| `GET` | `http://localhost:5002/events/:id` | Retrieve one authenticated user's event |
 
-## Testing Commands
+## API Testing Order
 
-### 1. Register
+The full testing sequence is documented in `API_TESTING.md`. A short version is below.
+
+Register a user:
 
 ```powershell
 curl.exe -X POST "http://localhost:5001/register" `
@@ -207,7 +243,7 @@ curl.exe -X POST "http://localhost:5001/register" `
   -d '{"name":"Muhammad Arsal","email":"arsal@example.com","password":"123456"}'
 ```
 
-### 2. Login
+Log in and store the JWT:
 
 ```powershell
 $login = curl.exe -X POST "http://localhost:5001/login" `
@@ -216,12 +252,9 @@ $login = curl.exe -X POST "http://localhost:5001/login" `
 
 $login = $login | ConvertFrom-Json
 $token = $login.token
-$token
 ```
 
-The `$token` variable is used by the protected Event Service commands below.
-
-### 3. Create Event
+Create an event:
 
 ```powershell
 curl.exe -X POST "http://localhost:5002/events" `
@@ -230,90 +263,37 @@ curl.exe -X POST "http://localhost:5002/events" `
   -d '{"title":"Cloud Computing Final Lab","description":"Lakehouse logging prototype event","location":"GIKI Lab","event_date":"2026-05-12"}'
 ```
 
-### 4. View Events
+View events:
 
 ```powershell
 curl.exe -X GET "http://localhost:5002/events" `
   -H "Authorization: Bearer $token"
 ```
 
-### 5. View Single Event
-
-```powershell
-curl.exe -X GET "http://localhost:5002/events/1" `
-  -H "Authorization: Bearer $token"
-```
-
-## Expected Evidence for Exam Submission
-
-Capture screenshots showing:
-
-- Auth service running
-- Event service running
-- PostgreSQL container running
-- RabbitMQ container running
-- Successful user registration
-- Successful login response with JWT token
-- Successful event creation response
-- Event retrieval response
-- RabbitMQ queue `350_event_notifications`
-- Notification service consumed message in Docker logs
-- JSON files created in `logs/`
-- JSON files created in `notification_logs/`
-
-## Useful Docker Commands
-
-```powershell
-docker compose ps
-```
-
-```powershell
-docker compose logs 350_auth_service
-```
-
-```powershell
-docker compose logs 350_event_service
-```
+Check worker output and generated logs:
 
 ```powershell
 docker compose logs 350_notification_service
+Get-ChildItem .\logs
+Get-ChildItem .\notification_logs
 ```
 
-```powershell
-docker compose down
-```
+## Evidence
 
-```powershell
-docker compose down -v
-```
+The repository includes `CE-408-LAB-FINAL-SCREENSHOTS.pdf`, a 4-page PDF evidence file for the lab submission. It is kept as an artifact rather than embedded in this README.
 
-Use `docker compose down -v` after the exam if you want to remove the PostgreSQL named volume and start with a clean database next time.
+## Limitations
 
-## GitHub Submission Instructions
+- The credentials and JWT secret in `docker-compose.yml` are local demo values for coursework, not production secrets.
+- There is no refresh-token flow, role system, or external identity provider.
+- The `events` table stores `event_date` as text rather than a typed date column.
+- JSON logs are written to local mounted folders; there is no object storage or query engine connected to them.
+- The services do not include automated tests in the repository.
 
-```powershell
-git init
-git add .
-git commit -m "Add 350 DataHive lakehouse logging system"
-git branch -M main
-```
+## Future Improvements
 
-After creating a GitHub repository named `350_datahive_lakehouse_logging`, GitHub will show the exact `git remote add origin ...` and `git push -u origin main` commands for your account. Run those two commands, then submit the accessible repository link and include the required screenshots in your exam submission.
-
-## Health Check URLs
-
-```text
-http://localhost:5001/health
-http://localhost:5002/health
-```
-
-## Notes
-
-- The Auth Service auto-creates the `users` table on startup.
-- The Event Service auto-creates the `events` table on startup.
-- The Event Service and Notification Service include RabbitMQ retry logic because RabbitMQ can take a little time to become ready.
-- Event routes require this header:
-
-```text
-Authorization: Bearer TOKEN_HERE
-```
+- Move secrets into environment-specific configuration.
+- Add automated API tests for auth, event creation, and message consumption.
+- Store `event_date` with a database date or timestamp type.
+- Add migrations instead of table creation inside service startup code.
+- Replace local JSON folders with object storage for a more realistic lakehouse-style pipeline.
