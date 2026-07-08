@@ -278,9 +278,12 @@ Get-ChildItem .\logs
 Get-ChildItem .\notification_logs
 ```
 
-## Evidence
+## Evidence / Report
 
-The repository includes `CE-408-LAB-FINAL-SCREENSHOTS.pdf`, a 4-page PDF evidence file for the lab submission. It is kept as an artifact rather than embedded in this README.
+- [Lab screenshot evidence PDF](CE-408-LAB-FINAL-SCREENSHOTS.pdf) - a 4-page PDF evidence file for the CE408L lab submission.
+- [API testing guide](API_TESTING.md) - the verified request order for registration, login, event creation, event retrieval, worker output, and generated JSON logs.
+
+The screenshot evidence is kept as a PDF artifact rather than embedded in this README.
 
 ## Limitations
 
