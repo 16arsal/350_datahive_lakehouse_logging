@@ -4,7 +4,15 @@ const path = require("path");
 require("dotenv").config();
 
 // 350 Notification Service: consumes event messages asynchronously and stores notification JSON logs.
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://350_rabbit:350_rabbit_password@localhost:5672";
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} must be set in the environment`);
+  }
+  return value;
+}
+
+const RABBITMQ_URL = requireEnv("RABBITMQ_URL");
 const QUEUE_NAME = process.env.RABBITMQ_QUEUE || "350_event_notifications";
 const NOTIFICATION_LOGS_DIR = process.env.NOTIFICATION_LOGS_DIR || "/app/notification_logs";
 
