@@ -4,15 +4,15 @@ services:
     image: postgres:16-alpine
     container_name: 350_postgres
     environment:
-      POSTGRES_USER: 350_admin
-      POSTGRES_PASSWORD: 350_password
-      POSTGRES_DB: 350_datahive_db
+      POSTGRES_USER: ${DB_USER:-datahive_app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: ${DB_NAME:-datahive_db}
     ports:
       - "5432:5432"
     volumes:
       - 350_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U 350_admin -d 350_datahive_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-datahive_app} -d ${DB_NAME:-datahive_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,8 +25,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: 350_rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: 350_rabbit
-      RABBITMQ_DEFAULT_PASS: 350_rabbit_password
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-datahive}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -48,10 +48,10 @@ services:
       PORT: 5001
       DB_HOST: 350_postgres
       DB_PORT: 5432
-      DB_USER: 350_admin
-      DB_PASSWORD: 350_password
-      DB_NAME: 350_datahive_db
-      JWT_SECRET: 350_super_secret_exam_key
+      DB_USER: ${DB_USER:-datahive_app}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-datahive_db}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
     ports:
       - "5001:5001"
     depends_on:
@@ -76,11 +76,11 @@ services:
       PORT: 5002
       DB_HOST: 350_postgres
       DB_PORT: 5432
-      DB_USER: 350_admin
-      DB_PASSWORD: 350_password
-      DB_NAME: 350_datahive_db
-      JWT_SECRET: 350_super_secret_exam_key
-      RABBITMQ_URL: amqp://350_rabbit:350_rabbit_password@350_rabbitmq:5672
+      DB_USER: ${DB_USER:-datahive_app}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-datahive_db}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-datahive}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}@350_rabbitmq:5672
       RABBITMQ_QUEUE: 350_event_notifications
       LOGS_DIR: /app/logs
     ports:
@@ -108,7 +108,7 @@ services:
       context: ./notification-service
     container_name: 350_notification_service
     environment:
-      RABBITMQ_URL: amqp://350_rabbit:350_rabbit_password@350_rabbitmq:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-datahive}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}@350_rabbitmq:5672
       RABBITMQ_QUEUE: 350_event_notifications
       NOTIFICATION_LOGS_DIR: /app/notification_logs
     volumes:
