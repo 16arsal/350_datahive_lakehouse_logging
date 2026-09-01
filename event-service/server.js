@@ -9,18 +9,26 @@ require("dotenv").config();
 // 350 Event Service: stores JWT-protected events, publishes RabbitMQ messages, and writes lakehouse JSON logs.
 const app = express();
 
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} must be set in the environment`);
+  }
+  return value;
+}
+
 const PORT = process.env.PORT || 5002;
-const JWT_SECRET = process.env.JWT_SECRET || "350_super_secret_exam_key";
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://350_rabbit:350_rabbit_password@localhost:5672";
+const JWT_SECRET = requireEnv("JWT_SECRET");
+const RABBITMQ_URL = requireEnv("RABBITMQ_URL");
 const QUEUE_NAME = process.env.RABBITMQ_QUEUE || "350_event_notifications";
 const LOGS_DIR = process.env.LOGS_DIR || "/app/logs";
 
 const pool = new Pool({
   host: process.env.DB_HOST || "localhost",
   port: Number(process.env.DB_PORT || 5432),
-  user: process.env.DB_USER || "350_admin",
-  password: process.env.DB_PASSWORD || "350_password",
-  database: process.env.DB_NAME || "350_datahive_db"
+  user: process.env.DB_USER || "datahive_app",
+  password: requireEnv("DB_PASSWORD"),
+  database: process.env.DB_NAME || "datahive_db"
 });
 
 let rabbitConnection = null;
