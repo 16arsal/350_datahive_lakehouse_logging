@@ -4,6 +4,16 @@ A Dockerized microservices prototype for user authentication, event creation, as
 
 This project was built for the CE408L Cloud Computing Lab final exam. It is intentionally small, but it demonstrates how multiple backend services can coordinate through a database, message queue, and structured file logs.
 
+## Product case study at a glance
+
+| Dimension | Evidence |
+| --- | --- |
+| User decision | Can an operator trust that an accepted event was stored, propagated, and recorded for later investigation? |
+| Product choice | Preserve both the producer-side event log and consumer-side notification log instead of treating a successful API response as the only evidence |
+| Reliability choice | Use a durable RabbitMQ queue, persistent messages, acknowledgements, retry/requeue behavior, and health checks |
+| Implemented outcome | A local prototype connecting authentication, event storage, asynchronous processing, and structured audit artifacts |
+| Critical limitation | Local JSON folders simulate ingestion evidence; this is not yet a queryable lakehouse or production observability system |
+
 ## What the System Does
 
 The system lets a user register, log in, create events, and retrieve their own events. When an event is created, the event service performs three actions:
@@ -180,6 +190,8 @@ Prerequisite: Docker Desktop or Docker Compose support.
 From the repository root:
 
 ```powershell
+Copy-Item .env.example .env
+# Replace every placeholder secret in .env before starting the stack.
 docker compose up --build
 ```
 
@@ -191,12 +203,7 @@ Event health:       http://localhost:5002/health
 RabbitMQ dashboard: http://localhost:15672
 ```
 
-RabbitMQ dashboard credentials from `docker-compose.yml`:
-
-```text
-Username: 350_rabbit
-Password: 350_rabbit_password
-```
+The RabbitMQ dashboard username and password come from the untracked `.env` file. The Compose configuration refuses to start when required secrets are missing.
 
 Stop the system:
 
@@ -287,7 +294,7 @@ The screenshot evidence is kept as a PDF artifact rather than embedded in this R
 
 ## Limitations
 
-- The credentials and JWT secret in `docker-compose.yml` are local demo values for coursework, not production secrets.
+- Secrets are supplied through an untracked local `.env` file, but there is no external secret manager or rotation workflow.
 - There is no refresh-token flow, role system, or external identity provider.
 - The `events` table stores `event_date` as text rather than a typed date column.
 - JSON logs are written to local mounted folders; there is no object storage or query engine connected to them.
@@ -295,7 +302,7 @@ The screenshot evidence is kept as a PDF artifact rather than embedded in this R
 
 ## Future Improvements
 
-- Move secrets into environment-specific configuration.
+- Integrate a managed secret store and rotation policy for deployed environments.
 - Add automated API tests for auth, event creation, and message consumption.
 - Store `event_date` with a database date or timestamp type.
 - Add migrations instead of table creation inside service startup code.
